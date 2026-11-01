@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Speed-to-Lead Demo</title>
+<style>
+  :root {
+    --bg: #f4f6f8; --card: #ffffff; --ink: #14202b; --muted: #5b6b7a; --line: #dbe2e8;
+    --brand: #0b6bcb; --brand-ink: #ffffff; --good: #0a7d4f; --warn: #a15c00; --bad: #b3261e;
+    --bubble-out: #e7f1fb; --bubble-in: #dff5e6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10161c; --card: #19222b; --ink: #e8eef3; --muted: #9fb0bf; --line: #2a3743;
+      --brand: #4a9bf0; --brand-ink: #08121c; --good: #46c58a; --warn: #e6a550; --bad: #ff8a80;
+      --bubble-out: #1f3347; --bubble-in: #1d3a2a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--card); }
+  header h1 { font-size: 18px; margin: 0; }
+  header .meta { color: var(--muted); font-size: 13px; }
+  main { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding: 16px 20px 96px; }
+  @media (max-width: 960px) { main { grid-template-columns: 1fr; } }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
+  section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  input, textarea, select { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); font: inherit; }
+  textarea { resize: none; height: 64px; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--ink); padding: 9px 12px; border-radius: 8px; cursor: pointer; }
+  button.primary { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); font-weight: 600; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid var(--brand); outline-offset: 1px; }
+  .row { display: flex; gap: 8px; margin-top: 12px; }
+  .row > * { flex: 1; }
+  .err { color: var(--bad); font-size: 13px; min-height: 18px; margin-top: 8px; }
+  .shop { font-weight: 700; margin-bottom: 4px; }
+
+  .phone { border: 1px solid var(--line); border-radius: 22px; padding: 12px; background: var(--bg); }
+  .thread { height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 6px 2px; }
+  .bubble { max-width: 84%; padding: 8px 11px; border-radius: 14px; font-size: 14px; overflow-wrap: anywhere; }
+  .bubble.out { align-self: flex-start; background: var(--bubble-out); border-bottom-left-radius: 4px; }
+  .bubble.in { align-self: flex-end; background: var(--bubble-in); border-bottom-right-radius: 4px; }
+  .bubble small { display: block; color: var(--muted); font-size: 11px; margin-top: 3px; }
+  .empty { color: var(--muted); text-align: center; margin: auto; font-size: 14px; }
+  .reply { display: flex; gap: 8px; margin-top: 10px; }
+  .reply input { flex: 1; }
+  .reply button { flex: 0 0 auto; }
+
+  .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px; }
+  .tile { border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+  .tile b { display: block; font-size: 22px; }
+  .tile span { color: var(--muted); font-size: 12px; }
+  .big { border: 2px solid var(--good); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+  .big b { font-size: 28px; color: var(--good); display: block; }
+  .big span { color: var(--muted); font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); }
+  .pill.good { color: var(--good); border-color: var(--good); }
+  .pill.warn { color: var(--warn); border-color: var(--warn); }
+  .pill.bad { color: var(--bad); border-color: var(--bad); }
+
+  footer { position: fixed; left: 0; right: 0; bottom: 0; }
+  #note { background: var(--card); border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; padding: 6px 20px; }
+  #caption { display: none; background: #0f2233; color: #fff; padding: 12px 20px; font-size: 18px; font-weight: 600; text-align: center; }
+  #caption.show { display: block; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Speed-to-Lead Demo</h1>
+    <div class="meta" id="meta">Loading…</div>
+  </div>
+  <button id="btn-reset" type="button">Reset demo</button>
+</header>
+
+<main>
+  <section aria-labelledby="h1">
+    <h2 id="h1">1. A new lead arrives</h2>
+    <div class="shop" id="shop-name">Demo HVAC Co.</div>
+    <div class="meta">Request a callback</div>
+    <label for="f-name">Name</label>
+    <input id="f-name" autocomplete="off" maxlength="60">
+    <label for="f-phone">Mobile number</label>
+    <input id="f-phone" inputmode="tel" autocomplete="off" placeholder="(510) 555-0100">
+    <label for="f-msg">What do you need?</label>
+    <textarea id="f-msg" maxlength="500"></textarea>
+    <div class="row">
+      <button id="btn-submit" class="primary" type="button">Send request</button>
+      <button id="btn-missed" type="button">Simulate missed call</button>
+    </div>
+    <div class="err" id="err" role="alert"></div>
+  </section>
+
+  <section aria-labelledby="h2">
+    <h2 id="h2">2. The lead's phone</h2>
+    <label for="lead-select" style="margin-top:0">Viewing</label>
+    <select id="lead-select"></select>
+    <div class="phone" style="margin-top:10px">
+      <div class="thread" id="thread" aria-live="polite"></div>
+      <div class="reply">
+        <input id="reply-input" aria-label="Reply as the lead" placeholder="Reply as the lead…" autocomplete="off" maxlength="500">
+        <button id="btn-reply" type="button">Send</button>
+        <button id="btn-stop" type="button" title="Reply STOP">STOP</button>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h3">
+    <h2 id="h3">3. Owner dashboard</h2>
+    <div class="big"><b id="last-resp">—</b><span id="last-resp-label">Waiting for the first lead</span></div>
+    <div class="tiles">
+      <div class="tile"><b id="t-leads">0</b><span>Leads</span></div>
+      <div class="tile"><b id="t-avg">—</b><span>Avg text-back time</span></div>
+      <div class="tile"><b id="t-fast">0</b><span>Texted under 60 s</span></div>
+      <div class="tile"><b id="t-stop">0</b><span>Opted out</span></div>
+    </div>
+    <table>
+      <thead><tr><th>Lead</th><th>Source</th><th>Texted back</th><th>Status</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </section>
+</main>
+
+<footer>
+  <div id="caption" role="status"></div>
+  <div id="note">Demo uses a simulated SMS gateway. Sending real texts needs an SMS provider and A2P 10DLC registration.</div>
+</footer>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  let selectedId = null;
+  let latest = { leads: [], messages: [] };
+
+  async function post(path, body) {
+    const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Request failed');
+    return data;
+  }
+
+  function fmtMs(ms) {
+    if (ms == null) return '—';
+    if (ms < 1000) return '< 1 s';
+    if (ms < 10000) return (ms / 1000).toFixed(1) + ' s';
+    return Math.round(ms / 1000) + ' s';
+  }
+  function clock(ts) {
+    return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+  }
+  function displayName(l) { return l.name || l.phone; }
+  function status(l) {
+    if (l.optedOut) return ['Opted out', 'bad'];
+    if (l.replied) return ['Replied', 'good'];
+    if (l.followupSent) return ['Followed up', 'warn'];
+    if (l.textedAt) return ['Texted back', 'good'];
+    return ['New', 'warn'];
+  }
+
+  function render() {
+    const { leads, messages } = latest;
+    if (!leads.some((l) => l.id === selectedId)) selectedId = leads.length ? leads[leads.length - 1].id : null;
+
+    const sel = $('lead-select');
+    const opts = leads.map((l) => `${l.id}|${displayName(l)}|${l.phone}`).join(',');
+    if (sel.dataset.opts !== opts) {
+      sel.textContent = '';
+      for (const l of leads) {
+        const o = document.createElement('option');
+        o.value = l.id;
+        o.textContent = `${displayName(l)} (${l.phone})`;
+        sel.appendChild(o);
+      }
+      if (!leads.length) {
+        const o = document.createElement('option');
+        o.textContent = 'No leads yet';
+        sel.appendChild(o);
+      }
+      sel.dataset.opts = opts;
+    }
+    if (selectedId != null) sel.value = String(selectedId);
+
+    const thread = $('thread');
+    const mine = messages.filter((m) => m.leadId === selectedId && m.dir !== 'system');
+    const sig = mine.map((m) => m.id).join(',');
+    if (thread.dataset.sig !== sig) {
+      thread.textContent = '';
+      if (!mine.length) {
+        const e = document.createElement('div');
+        e.className = 'empty';
+        e.textContent = 'Texts will appear here.';
+        thread.appendChild(e);
+      }
+      for (const m of mine) {
+        const b = document.createElement('div');
+        b.className = 'bubble ' + (m.dir === 'out' ? 'out' : 'in');
+        b.textContent = m.body;
+        const s = document.createElement('small');
+        s.textContent = (m.dir === 'out' ? 'Demo HVAC Co. · ' : 'Lead · ') + clock(m.ts);
+        b.appendChild(s);
+        thread.appendChild(b);
+      }
+      thread.scrollTop = thread.scrollHeight;
+      thread.dataset.sig = sig;
+    }
+
+    const timed = leads.filter((l) => l.responseMs != null);
+    const lastTimed = timed[timed.length - 1];
+    $('last-resp').textContent = lastTimed ? fmtMs(lastTimed.responseMs) : '—';
+    $('last-resp-label').textContent = lastTimed
+      ? `Last lead (${displayName(lastTimed)}) was texted back. Goal: under 60 s.`
+      : 'Waiting for the first lead';
+    $('t-leads').textContent = leads.length;
+    $('t-avg').textContent = timed.length ? fmtMs(Math.round(timed.reduce((a, l) => a + l.responseMs, 0) / timed.length)) : '—';
+    $('t-fast').textContent = timed.filter((l) => l.responseMs < 60000).length;
+    $('t-stop').textContent = leads.filter((l) => l.optedOut).length;
+
+    const rows = $('rows');
+    rows.textContent = '';
+    for (const l of leads) {
+      const tr = document.createElement('tr');
+      const cells = [displayName(l), l.source === 'missed-call' ? 'Missed call' : l.source === 'web-form' ? 'Web form' : 'Inbound text', fmtMs(l.responseMs)];
+      for (const c of cells) {
+        const td = document.createElement('td');
+        td.textContent = c;
+        tr.appendChild(td);
+      }
+      const td = document.createElement('td');
+      const [label, tone] = status(l);
+      const pill = document.createElement('span');
+      pill.className = 'pill ' + tone;
+      pill.textContent = label;
+      td.appendChild(pill);
+      tr.appendChild(td);
+      rows.appendChild(tr);
+    }
+  }
+
+  async function refresh() {
+    try {
+      latest = await (await fetch('/api/state')).json();
+      $('meta').textContent = `${latest.provider} · follow-up after ${fmtMs(latest.followupMs)} of silence`;
+      $('shop-name').textContent = latest.business;
+      render();
+    } catch { /* server restarting; try again */ }
+  }
+
+  function showErr(e) { $('err').textContent = e ? e.message : ''; }
+
+  $('btn-submit').addEventListener('click', async () => {
+    showErr();
+    try {
+      const { lead } = await post('/api/lead', { name: $('f-name').value, phone: $('f-phone').value, message: $('f-msg').value });
+      selectedId = lead.id;
+      await refresh();
+    } catch (e) { showErr(e); }
+  });
+  $('btn-missed').addEventListener('click', async () => {
+    showErr();
+    try {
+      const { lead } = await post('/api/missed-call', { name: $('f-name').value, phone: $('f-phone').value });
+      selectedId = lead.id;
+      await refresh();
+    } catch (e) { showErr(e); }
+  });
+  async function sendReply(text) {
+    const lead = latest.leads.find((l) => l.id === selectedId);
+    if (!lead || !text.trim()) return;
+    await post('/api/sms/inbound', { phone: lead.phone, body: text });
+    await refresh();
+  }
+  $('btn-reply').addEventListener('click', async () => {
+    const v = $('reply-input').value;
+    $('reply-input').value = '';
+    await sendReply(v);
+  });
+  $('reply-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-reply').click(); });
+  $('btn-stop').addEventListener('click', () => sendReply('STOP'));
+  $('lead-select').addEventListener('change', (e) => { selectedId = Number(e.target.value); render(); });
+  $('btn-reset').addEventListener('click', async () => {
+    await post('/api/reset');
+    ['f-name', 'f-phone', 'f-msg', 'reply-input'].forEach((id) => { $(id).value = ''; });
+    selectedId = null;
+    await refresh();
+  });
+
+  window.setCaption = (text) => {
+    const c = $('caption');
+    c.textContent = text || '';
+    c.classList.toggle('show', Boolean(text));
+  };
+
+  refresh();
+  setInterval(refresh, 400);
+</script>
+</body>
+</html>
