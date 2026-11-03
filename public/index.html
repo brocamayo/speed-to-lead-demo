@@ -36,6 +36,8 @@
   .row > * { flex: 1; }
   .err { color: var(--bad); font-size: 13px; min-height: 18px; margin-top: 8px; }
   .shop { font-weight: 700; margin-bottom: 4px; }
+  .actions { display: flex; align-items: center; gap: 14px; }
+  .link { color: var(--brand); font-size: 14px; }
 
   .phone { border: 1px solid var(--line); border-radius: 22px; padding: 12px; background: var(--bg); }
   .thread { height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 6px 2px; }
@@ -75,13 +77,16 @@
     <h1>Speed-to-Lead Demo</h1>
     <div class="meta" id="meta">Loading…</div>
   </div>
-  <button id="btn-reset" type="button">Reset demo</button>
+  <div class="actions">
+    <a class="link" href="/settings">Business settings</a>
+    <button id="btn-reset" type="button">Reset demo</button>
+  </div>
 </header>
 
 <main>
   <section aria-labelledby="h1">
     <h2 id="h1">1. A new lead arrives</h2>
-    <div class="shop" id="shop-name">Demo HVAC Co.</div>
+    <div class="shop" id="shop-name">&nbsp;</div>
     <div class="meta">Request a callback</div>
     <label for="f-name">Name</label>
     <input id="f-name" autocomplete="off" maxlength="60">
@@ -200,7 +205,7 @@
         b.className = 'bubble ' + (m.dir === 'out' ? 'out' : 'in');
         b.textContent = m.body;
         const s = document.createElement('small');
-        s.textContent = (m.dir === 'out' ? 'Demo HVAC Co. · ' : 'Lead · ') + clock(m.ts);
+        s.textContent = (m.dir === 'out' ? (latest.business || 'Business') + ' · ' : 'Lead · ') + clock(m.ts);
         b.appendChild(s);
         thread.appendChild(b);
       }
@@ -244,7 +249,9 @@
     try {
       latest = await (await fetch('/api/state')).json();
       $('meta').textContent = `${latest.provider} · follow-up after ${fmtMs(latest.followupMs)} of silence`;
-      $('shop-name').textContent = latest.business;
+      const digits = String(latest.businessPhone || '').replace(/\D/g, '').slice(-10);
+      const phone = digits.length === 10 ? ` · (${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}` : '';
+      $('shop-name').textContent = latest.business + phone;
       render();
     } catch { /* server restarting; try again */ }
   }

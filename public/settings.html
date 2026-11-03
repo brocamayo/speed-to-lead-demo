@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Business Settings</title>
+<style>
+  :root { --bg: #f4f6f8; --card: #ffffff; --ink: #14202b; --muted: #5b6b7a; --line: #dbe2e8; --brand: #0b6bcb; --brand-ink: #ffffff; --good: #0a7d4f; --bad: #b3261e; --bubble: #e7f1fb; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #10161c; --card: #19222b; --ink: #e8eef3; --muted: #9fb0bf; --line: #2a3743; --brand: #4a9bf0; --brand-ink: #08121c; --good: #46c58a; --bad: #ff8a80; --bubble: #1f3347; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  main { max-width: 520px; margin: 0 auto; padding: 24px 16px 48px; }
+  a { color: var(--brand); }
+  h1 { font-size: 20px; margin: 8px 0 4px; }
+  p.lead { color: var(--muted); margin: 0 0 16px; }
+  form, .preview { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 4px; }
+  label:first-of-type { margin-top: 0; }
+  input { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); font: inherit; }
+  input:focus-visible, button:focus-visible, a:focus-visible { outline: 3px solid var(--brand); outline-offset: 1px; }
+  button { margin-top: 16px; width: 100%; padding: 11px; border: 1px solid var(--brand); border-radius: 8px; background: var(--brand); color: var(--brand-ink); font: inherit; font-weight: 600; cursor: pointer; }
+  .status { min-height: 20px; margin-top: 10px; font-size: 14px; }
+  .status.ok { color: var(--good); }
+  .status.error { color: var(--bad); }
+  .preview h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+  .bubble { background: var(--bubble); border-radius: 14px; border-bottom-left-radius: 4px; padding: 10px 12px; overflow-wrap: anywhere; }
+  .note { color: var(--muted); font-size: 13px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<main>
+  <a href="/">&larr; Back to the demo</a>
+  <h1>Business settings</h1>
+  <p class="lead">Your business name is used in every text-back. It is saved to <code>config.json</code> on this computer.</p>
+
+  <form id="form">
+    <label for="businessName">Business name</label>
+    <input id="businessName" name="businessName" maxlength="60" autocomplete="organization" required>
+    <label for="phone">Business phone number</label>
+    <input id="phone" name="phone" inputmode="tel" autocomplete="tel" placeholder="(510) 555-0100" required>
+    <button type="submit">Save</button>
+    <div class="status" id="status" role="status"></div>
+  </form>
+
+  <div class="preview">
+    <h2>Missed-call text-back preview</h2>
+    <div class="bubble" id="preview">Loading…</div>
+    <div class="note">The phone number is saved and shown in the demo. It does not change which number texts are sent from.</div>
+  </div>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  function fmtPhone(p) {
+    const d = String(p || '').replace(/\D/g, '').slice(-10);
+    return d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : '';
+  }
+  function show(data) {
+    $('businessName').value = data.config.businessName;
+    $('phone').value = fmtPhone(data.config.phone);
+    $('preview').textContent = data.preview;
+  }
+  function status(text, kind) {
+    const s = $('status');
+    s.textContent = text;
+    s.className = 'status ' + (kind || '');
+  }
+
+  fetch('/api/config').then((r) => r.json()).then(show).catch(() => status('Could not load settings.', 'error'));
+
+  $('form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    status('Saving…');
+    try {
+      const res = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ businessName: $('businessName').value, phone: $('phone').value }),
+      });
+      const data = await res.json();
+      if (!res.ok) return status(data.error || 'Could not save.', 'error');
+      show(data);
+      status('Saved. New texts will use this name.', 'ok');
+    } catch {
+      status('Could not save. Is the server running?', 'error');
+    }
+  });
+</script>
+</body>
+</html>

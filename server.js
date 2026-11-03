@@ -9,10 +9,10 @@ const path = require('path');
 const { createSender } = require('./sms');
 
 const PORT = Number(process.env.PORT || 3000);
-const BUSINESS = process.env.BUSINESS_NAME || 'Demo HVAC Co.';
+const CONFIG_PATH = process.env.CONFIG_PATH || path.join(__dirname, 'config.json');
+const DEFAULT_CONFIG = { businessName: process.env.BUSINESS_NAME || 'Demo HVAC Co.', phone: '' };
 const FOLLOWUP_MS = Number(process.env.FOLLOWUP_DELAY_MS || 5 * 60 * 1000);
-const SHOP = /[.!?]$/.test(BUSINESS) ? BUSINESS : `${BUSINESS}.`;
-const STOP_WORDS =/^\s*(stop|stopall|unsubscribe|cancel|end|quit)\s*[.!]?\s*$/i;
+const STOP_WORDS = /^\s*(stop|stopall|unsubscribe|cancel|end|quit)\s*[.!]?\s*$/i;
 const MAX_BODY = 10 * 1024;
 
 const sender = createSender();
@@ -34,6 +34,37 @@ function clean(value, max) {
     .trim()
     .slice(0, max);
 }
+
+function validateConfig(b) {
+  const businessName = clean(b && b.businessName, 60);
+  if (!businessName) return { error: 'Enter your business name.' };
+  const phone = normalizePhone(b && b.phone);
+  if (!phone) return { error: 'Enter a valid 10-digit US phone number.' };
+  return { config: { businessName, phone } };
+}
+
+function loadConfig(file = CONFIG_PATH) {
+  try {
+    const { config: saved } = validateConfig(JSON.parse(fs.readFileSync(file, 'utf8')));
+    if (saved) return saved;
+    console.warn(`Ignoring invalid ${file}; using defaults.`);
+  } catch (err) {
+    if (err.code !== 'ENOENT') console.warn(`Could not read ${file} (${err.message}); using defaults.`);
+  }
+  return { ...DEFAULT_CONFIG };
+}
+
+function saveConfig(next, file = CONFIG_PATH) {
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  fs.renameSync(tmp, file);
+}
+
+let config = loadConfig();
+
+// "Bayside Heating." -> "Bayside Heating" for mid-sentence use; ensure one trailing period otherwise.
+const businessName = () => config.businessName.replace(/[.!?]$/, '');
+const shopSentence = () => (/[.!?]$/.test(config.businessName) ? config.businessName : `${config.businessName}.`);
 
 function record(lead, dir, body, kind) {
   const msg = { id: nextId++, leadId: lead.id, dir, body, kind, ts: Date.now() };
@@ -88,22 +119,25 @@ function scheduleFollowUp(lead) {
     lead.followupSent = true;
     sendText(
       lead,
-      `Hi again, it's ${SHOP} Still happy to help. Just reply with what you need and we'll get you scheduled. Reply STOP to opt out.`,
+      `Hi again, it's ${shopSentence()} Still happy to help. Just reply with what you need and we'll get you scheduled. Reply STOP to opt out.`,
       'followup',
     );
   }, FOLLOWUP_MS);
   timers.add(timer);
 }
 
-async function textBack(lead) {
+function textBackBody(lead) {
   const first = lead.name ? lead.name.split(' ')[0] : '';
   const greet = first ? `Hi ${first}, this` : 'Hi, this';
   const opener =
     lead.source === 'missed-call'
       ? 'Sorry we missed your call!'
       : 'Thanks for reaching out!';
-  const body = `${greet} is ${SHOP} ${opener} What can we help you with? Reply STOP to opt out.`;
-  const msg = await sendText(lead, body, 'textback');
+  return `${greet} is ${shopSentence()} ${opener} What can we help you with? Reply STOP to opt out.`;
+}
+
+async function textBack(lead) {
+  const msg = await sendText(lead, textBackBody(lead), 'textback');
   if (msg && lead.textedAt == null) {
     lead.textedAt = msg.ts;
     lead.responseMs = msg.ts - lead.createdAt;
@@ -119,7 +153,7 @@ async function handleInbound(phone, body) {
     lead.optedOut = true;
     await sendText(
       lead,
-      `You're unsubscribed from ${BUSINESS.replace(/[.!?]$/, '')} texts. No more messages will be sent.`,
+      `You're unsubscribed from ${businessName()} texts. No more messages will be sent.`,
       'optout-confirm',
     );
     return lead;
@@ -129,7 +163,7 @@ async function handleInbound(phone, body) {
     lead.acked = true;
     await sendText(
       lead,
-      `Got it, thanks! Someone from ${BUSINESS.replace(/[.!?]$/, '')} will reach out shortly.`,
+      `Got it, thanks! Someone from ${businessName()} will reach out shortly.`,
       'ack',
     );
   }
@@ -189,13 +223,30 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/state') {
       return send(res, 200, {
-        business: BUSINESS,
+        business: config.businessName,
+        businessPhone: config.phone,
         provider: sender.name,
         simulated: sender.simulated,
         followupMs: FOLLOWUP_MS,
         leads,
         messages: messages.slice(-300),
         now: Date.now(),
+      });
+    }
+    if (req.method === 'GET' && url.pathname === '/settings') {
+      const html = fs.readFileSync(path.join(__dirname, 'public', 'settings.html'));
+      return send(res, 200, html, 'text/html; charset=utf-8');
+    }
+    if (url.pathname === '/api/config' && (req.method === 'GET' || req.method === 'POST')) {
+      if (req.method === 'POST') {
+        const result = validateConfig(await readBody(req));
+        if (result.error) return send(res, 400, { error: result.error });
+        saveConfig(result.config);
+        config = result.config;
+      }
+      return send(res, 200, {
+        config,
+        preview: textBackBody({ name: 'Dana', source: 'missed-call' }),
       });
     }
     if (req.method === 'POST' && url.pathname === '/api/reset') {
@@ -248,4 +299,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { server, reset };
+module.exports = { server, reset, loadConfig };

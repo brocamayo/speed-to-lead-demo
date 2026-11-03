@@ -1,8 +1,17 @@
 'use strict';
 
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stl-test-'));
+const configPath = path.join(tmpDir, 'config.json');
+process.env.CONFIG_PATH = configPath;
 process.env.FOLLOWUP_DELAY_MS = '300';
+delete process.env.BUSINESS_NAME;
+
 const assert = require('node:assert/strict');
-const { server } = require('./server');
+const { server, loadConfig } = require('./server');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -76,7 +85,61 @@ async function main() {
   assert.equal(bad.status, 400);
   console.log('ok  invalid input rejected');
 
+  // 6. Settings form: defaults, save, persist, and the saved name is used in texts
+  const page = await fetch(base + '/settings');
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /Business name/);
+  const defaults = await (await fetch(base + '/api/config')).json();
+  assert.equal(defaults.config.businessName, 'Demo HVAC Co.');
+  assert.equal(fs.existsSync(configPath), false, 'nothing written until saved');
+
+  const save = await post('/api/config', { businessName: '  Bayside Heating & Air  ', phone: '(510) 555-0100' });
+  assert.equal(save.status, 200);
+  assert.deepEqual(save.json.config, { businessName: 'Bayside Heating & Air', phone: '+15105550100' });
+  assert.match(save.json.preview, /this is Bayside Heating & Air\./);
+  assert.deepEqual(JSON.parse(fs.readFileSync(configPath, 'utf8')), save.json.config);
+  assert.deepEqual(loadConfig(configPath), save.json.config, 'config survives a restart');
+  console.log('ok  settings saved to config.json and reloadable');
+
+  const d = await post('/api/missed-call', { phone: '510-555-0188', name: 'Robin' });
+  s = await state();
+  assert.equal(s.business, 'Bayside Heating & Air');
+  assert.equal(s.businessPhone, '+15105550100');
+  const first = s.messages.find((m) => m.leadId === d.json.lead.id && m.kind === 'textback');
+  assert.equal(
+    first.body,
+    'Hi Robin, this is Bayside Heating & Air. Sorry we missed your call! What can we help you with? Reply STOP to opt out.',
+  );
+  assert.ok(!first.body.includes('Demo HVAC'), 'placeholder no longer used');
+  await sleep(700);
+  s = await state();
+  assert.match(s.messages.find((m) => m.leadId === d.json.lead.id && m.kind === 'followup').body, /it's Bayside Heating & Air\./);
+  await post('/api/sms/inbound', { phone: '510-555-0188', body: 'STOP' });
+  s = await state();
+  assert.match(
+    s.messages.find((m) => m.leadId === d.json.lead.id && m.kind === 'optout-confirm').body,
+    /unsubscribed from Bayside Heating & Air texts/,
+  );
+  console.log('ok  missed-call text, follow-up and opt-out use the saved business name');
+
+  // 7. Settings validation
+  assert.equal((await post('/api/config', { businessName: '', phone: '5105550100' })).status, 400);
+  assert.equal((await post('/api/config', { businessName: '   ', phone: '5105550100' })).status, 400);
+  assert.equal((await post('/api/config', { businessName: 'Acme', phone: '12' })).status, 400);
+  assert.equal((await post('/api/config', {})).status, 400);
+  const kept = await (await fetch(base + '/api/config')).json();
+  assert.equal(kept.config.businessName, 'Bayside Heating & Air', 'rejected save changes nothing');
+  const long = await post('/api/config', { businessName: `${'A'.repeat(100)}\n`, phone: '5105550100' });
+  assert.equal(long.json.config.businessName.length, 60);
+  const badFile = path.join(tmpDir, 'bad.json');
+  fs.writeFileSync(badFile, '{nope');
+  assert.equal(loadConfig(badFile).businessName, 'Demo HVAC Co.', 'corrupt file falls back to defaults');
+  fs.writeFileSync(badFile, JSON.stringify({ businessName: '', phone: 'x' }));
+  assert.equal(loadConfig(badFile).businessName, 'Demo HVAC Co.', 'invalid file falls back to defaults');
+  console.log('ok  settings validation and fallbacks');
+
   server.close();
+  fs.rmSync(tmpDir, { recursive: true, force: true });
   console.log('\nAll checks passed.');
 }
 
